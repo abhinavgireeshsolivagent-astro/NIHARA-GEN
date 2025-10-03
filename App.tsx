@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LiveServerMessage, Modality, Blob } from '@google/genai';
 import Sidebar from './components/Sidebar';
@@ -7,8 +8,7 @@ import ChatView from './components/ChatView';
 import InputBar from './components/InputBar';
 import { OnboardingModal, UpgradeModal, SettingsModal } from './components/Modals';
 import { Personality, MessageSender, ChatMessage, AppMode, ChatHistory } from './types';
-// FIX: Import `getAiClient` to resolve reference error when starting a live session.
-import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch, isAiAvailable, getAiClient } from './services/geminiService';
+import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch, getAiClient } from './services/geminiService';
 import { SparklesIcon } from './constants';
 
 // Audio Encoding/Decoding utilities
@@ -125,7 +125,7 @@ const App: React.FC = () => {
     };
     
     const startNewChat = useCallback(() => {
-        if (isAiAvailable && userName && currentMode !== AppMode.DeepResearch) {
+        if (userName && currentMode !== AppMode.DeepResearch) {
              startChat(currentPersonality, currentMode, isUpgraded, userName);
         }
     }, [currentPersonality, currentMode, isUpgraded, userName]);
@@ -252,12 +252,6 @@ const App: React.FC = () => {
     };
     
     const handleToggleLiveMode = async () => {
-        if (!isAiAvailable) {
-            // UI should prevent this, but as a safeguard:
-            alert("Live mode is not available. Please ensure the API Key is configured correctly in your deployment environment.");
-            return;
-        }
-
         if(isLive) {
             liveSession?.close();
             setLiveSession(null);
@@ -385,9 +379,9 @@ const App: React.FC = () => {
                         </button>
                     )}
                 </div>
-                <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} isAiAvailable={isAiAvailable} />
+                <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} />
                 {isLive && <LiveTranscriptionOverlay transcript={liveTranscript} />}
-                <InputBar onSendMessage={handleSendMessage} isLoading={isLoading} isLive={isLive} onToggleLive={handleToggleLiveMode} isAiAvailable={isAiAvailable} />
+                <InputBar onSendMessage={handleSendMessage} isLoading={isLoading} isLive={isLive} onToggleLive={handleToggleLiveMode} />
             </main>
             <OnboardingModal show={showOnboarding} onSave={handleNameSave} />
             <UpgradeModal 

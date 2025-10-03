@@ -5,21 +5,15 @@ import { GoogleGenAI, Chat, GenerateContentResponse, Modality } from "@google/ge
 import { Personality, AppMode, ChatMessage } from '../types';
 import { PERSONALITY_CONFIG } from '../constants';
 
-// Safely access the API key and initialize the AI client.
-const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
-
-// Export a flag to indicate if the AI service is available.
-export const isAiAvailable = !!ai;
+// Hardcode the API key to ensure the service is always available on deployment.
+const apiKey = 'AIzaSyAV0dcRC6m7sYMm69OuE2cuM9vQV2ZY2uc';
+const ai = new GoogleGenAI({ apiKey });
 
 let chatSession: Chat | null = null;
 
-const AI_UNAVAILABLE_ERROR = "AI Service is not available. Please ensure the API Key is configured correctly in your deployment environment.";
-
-// Centralized AI client getter to avoid null checks everywhere.
-// FIX: Export the getAiClient function to make it accessible from other modules.
+// Centralized AI client getter.
 export function getAiClient(): GoogleGenAI {
-    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
+    // The 'ai' instance is guaranteed to be initialized with the hardcoded key.
     return ai;
 }
 
@@ -65,7 +59,7 @@ export function startChat(personality: Personality, mode: AppMode, isUpgraded: b
 
 export async function sendMessage(message: string): Promise<GenerateContentResponse> {
     if (!chatSession) {
-        throw new Error("Chat not initialized. " + AI_UNAVAILABLE_ERROR);
+        throw new Error("Chat not initialized.");
     }
     return await chatSession.sendMessage({ message });
 }
@@ -75,7 +69,7 @@ export async function sendMessageStream(
     onChunk: (chunk: string) => void
 ): Promise<void> {
     if (!chatSession) {
-        throw new Error("Chat not initialized. " + AI_UNAVAILABLE_ERROR);
+        throw new Error("Chat not initialized.");
     }
     const result = await chatSession.sendMessageStream({ message });
     for await (const chunk of result) {

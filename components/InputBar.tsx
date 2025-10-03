@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useRef } from 'react';
 import { PaperclipIcon, SendIcon, MicIcon } from '../constants';
 
@@ -8,10 +9,9 @@ interface InputBarProps {
   isLoading: boolean;
   isLive: boolean;
   onToggleLive: () => void;
-  isAiAvailable: boolean;
 }
 
-const InputBar: React.FC<InputBarProps> = ({ onSendMessage, isLoading, isLive, onToggleLive, isAiAvailable }) => {
+const InputBar: React.FC<InputBarProps> = ({ onSendMessage, isLoading, isLive, onToggleLive }) => {
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,7 +40,6 @@ const InputBar: React.FC<InputBarProps> = ({ onSendMessage, isLoading, isLive, o
           onClick={() => fileInputRef.current?.click()}
           className="p-3 text-gray-400 hover:text-white hover:bg-black/20 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="Attach file"
-          disabled={!isAiAvailable}
         >
           <PaperclipIcon />
         </button>
@@ -50,7 +49,6 @@ const InputBar: React.FC<InputBarProps> = ({ onSendMessage, isLoading, isLive, o
           onChange={handleFileChange}
           className="hidden"
           accept="image/*,application/pdf,text/*"
-          disabled={!isAiAvailable}
         />
         <textarea
           value={text}
@@ -61,22 +59,21 @@ const InputBar: React.FC<InputBarProps> = ({ onSendMessage, isLoading, isLive, o
               handleSend();
             }
           }}
-          placeholder={!isAiAvailable ? 'AI Service is unavailable. Please configure API Key.' : (file ? `${file.name} attached. Add a message...` : `Message Nihara...`)}
+          placeholder={file ? `${file.name} attached. Add a message...` : `Message Nihara...`}
           className="flex-1 bg-transparent text-white placeholder-gray-500 focus:outline-none resize-none max-h-32 p-2 disabled:opacity-50"
           rows={1}
-          disabled={isLoading || isLive || !isAiAvailable}
+          disabled={isLoading || isLive}
         />
         <button 
           onClick={onToggleLive}
           className={`p-3 rounded-full transition-colors ${isLive ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:text-white hover:bg-black/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
           aria-label="Toggle Live Mode"
-          disabled={!isAiAvailable}
         >
             <MicIcon />
         </button>
         <button
           onClick={handleSend}
-          disabled={isLoading || isLive || !isAiAvailable}
+          disabled={isLoading || isLive}
           className="p-3 bg-purple-600 text-white rounded-full hover:bg-purple-700 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
           aria-label="Send message"
         >
