@@ -16,6 +16,7 @@ export interface ChatMessage {
   text: string;
   image?: string; // base64 image
   isTyping?: boolean;
+  sources?: { title: string; uri: string; }[];
 }
 
 export enum AppMode {

@@ -108,6 +108,58 @@
         opacity: 1;
         margin-top: 0.5rem; /* 8px, matches mt-2 */
       }
+
+      @keyframes typing-bars {
+        0%, 100% { transform: scaleY(0.4); }
+        50% { transform: scaleY(1); }
+      }
+      .animate-typing-bars {
+        animation: typing-bars 1.2s infinite ease-in-out;
+        transform-origin: bottom;
+      }
+
+      .code-block {
+        background-color: #1e293b; /* slate-800 */
+        border-radius: 0.5rem;
+        padding: 1rem;
+        font-family: monospace;
+        font-size: 0.875rem;
+        overflow-x: auto;
+        position: relative;
+        margin-top: 0.75rem;
+        margin-bottom: 0.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .code-block-header {
+        position: absolute;
+        top: 0;
+        right: 0;
+        padding: 0.5rem;
+      }
+      .code-copy-button {
+        background: rgba(255,255,255,0.1);
+        border: none;
+        color: #d1d5db; /* gray-300 */
+        padding: 0.25rem;
+        border-radius: 0.25rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        opacity: 0.5;
+        transition: opacity 0.2s, background 0.2s;
+      }
+      .code-block:hover .code-copy-button {
+        opacity: 1;
+      }
+      .code-copy-button:hover {
+        background: rgba(255,255,255,0.2);
+      }
+      
+      .transcription-overlay {
+        animation: subtle-fade-in-up 0.5s ease-out forwards;
+      }
     </style>
   <script type="importmap">
 {

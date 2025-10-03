@@ -65,7 +65,7 @@ const ChatView: React.FC<ChatViewProps> = ({ messages, personality, userName, mo
       ) : (
         <div className="flex flex-col">
           {messages.map((msg) => (
-            <Message key={msg.id} message={msg} isUpgraded={isUpgraded} personality={personality} />
+            <Message key={msg.id} message={msg} isUpgraded={isUpgraded} personality={personality} userName={userName} />
           ))}
           <div ref={scrollRef} />
         </div>

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality } from "@google/genai";
-import { Personality, AppMode } from '../types';
+import { Personality, AppMode, ChatMessage } from '../types';
 import { PERSONALITY_CONFIG } from '../constants';
 
 if (!process.env.API_KEY) {
@@ -22,7 +22,7 @@ export function getSystemInstruction(personality: Personality, mode: AppMode, is
             baseInstruction += " You are in Image Generation mode. Your primary task is to help the user create or edit images based on their descriptions. Be descriptive and creative.";
             break;
         case AppMode.DeepResearch:
-            baseInstruction += " You are in Deep Research mode. Provide detailed, well-sourced information. Be analytical and thorough.";
+            baseInstruction += " You are in Deep Research mode. Provide detailed, well-sourced information. Be analytical and thorough. Use your search tool to find the most current and relevant information.";
             break;
         case AppMode.CodeWriter:
             baseInstruction += " You are in Code Writer mode. Generate clean, efficient, and well-commented code in various programming languages as requested by the user. Explain the code clearly.";
@@ -69,6 +69,26 @@ export async function sendMessageStream(
     }
 }
 
+export async function sendMessageWithSearch(
+    message: string,
+    systemInstruction: string,
+): Promise<{ text: string; sources: ChatMessage['sources'] }> {
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: message,
+        config: {
+          tools: [{googleSearch: {}}],
+          systemInstruction: systemInstruction,
+        },
+    });
+
+    const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.map(
+        chunk => chunk.web
+    ).filter(web => web?.uri && web?.title) as { title: string; uri: string; }[] || [];
+
+    return { text: response.text, sources };
+}
+
 
 // FIX: Replaced generateOrEditImage with two separate functions for clarity and to use the correct models.
 export async function generateImage(prompt: string): Promise<string> {
@@ -98,7 +118,7 @@ export async function editImage(prompt: string, base64Image: string, mimeType: s
     ];
 
     return await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image-preview',
+        model: 'gemini-2.5-flash-image',
         contents: {
             parts: parts,
         },

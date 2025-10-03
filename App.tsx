@@ -5,7 +5,7 @@ import ChatView from './components/ChatView';
 import InputBar from './components/InputBar';
 import { OnboardingModal, UpgradeModal, SettingsModal } from './components/Modals';
 import { Personality, MessageSender, ChatMessage, AppMode, ChatHistory } from './types';
-import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction } from './services/geminiService';
+import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch } from './services/geminiService';
 import { SparklesIcon } from './constants';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -62,6 +62,16 @@ function createBlobFromAudio(data: Float32Array): Blob {
     };
 }
 
+const LiveTranscriptionOverlay: React.FC<{ transcript: { user: string; assistant: string } }> = ({ transcript }) => (
+    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-10 transcription-overlay">
+        <div className="glassmorphic rounded-xl p-4 text-sm text-gray-300 shadow-2xl">
+            {transcript.user && <p><span className="font-bold text-white">You:</span> {transcript.user}</p>}
+            {transcript.assistant && <p className="mt-1"><span className="font-bold text-purple-300">Nihara:</span> {transcript.assistant}</p>}
+        </div>
+    </div>
+);
+
+
 const App: React.FC = () => {
     const [userName, setUserName] = useState<string>('');
     const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
@@ -80,6 +90,8 @@ const App: React.FC = () => {
     // Live Mode State
     const [isLive, setIsLive] = useState<boolean>(false);
     const [liveSession, setLiveSession] = useState<any>(null);
+    const [liveTranscript, setLiveTranscript] = useState({ user: '', assistant: '' });
+    const liveTranscriptRef = useRef({ user: '', assistant: '' });
     const [voiceId, setVoiceId] = useState<string>('Zephyr');
     const [language, setLanguage] = useState<string>('English');
     const outputAudioContextRef = useRef<AudioContext | null>(null);
@@ -112,7 +124,7 @@ const App: React.FC = () => {
     };
     
     const startNewChat = useCallback(() => {
-        if (userName) {
+        if (userName && currentMode !== AppMode.DeepResearch) {
              startChat(currentPersonality, currentMode, isUpgraded, userName);
         }
     }, [currentPersonality, currentMode, isUpgraded, userName]);
@@ -179,13 +191,16 @@ const App: React.FC = () => {
         setMessages((prev) => [...prev, assistantTypingMessage]);
         
         try {
-            if (currentMode === AppMode.ImageGen && (file || text.toLowerCase().includes("generate") || text.toLowerCase().includes("create"))) {
+            if (currentMode === AppMode.DeepResearch) {
+                const systemInstruction = getSystemInstruction(currentPersonality, currentMode, isUpgraded, userName);
+                const { text: responseText, sources } = await sendMessageWithSearch(text, systemInstruction);
+                setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: responseText, sources: sources, isTyping: false } : m));
+            } else if (currentMode === AppMode.ImageGen && (file || text.toLowerCase().includes("generate") || text.toLowerCase().includes("create"))) {
                 const base64Image = file ? (await fileToDataUrl(file)).split(',')[1] : undefined;
                 const mimeType = file ? file.type : undefined;
                 
                 if (file && base64Image && mimeType) { // Editing
                     const response = await editImage(text, base64Image, mimeType);
-
                     let responseText = '';
                     let responseImage = '';
 
@@ -196,13 +211,11 @@ const App: React.FC = () => {
                             responseImage = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
                         }
                     }
-
                     setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: responseText, image: responseImage, isTyping: false } : m));
                 } else { // Generation
                     const imageUrl = await generateImage(text);
                     setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: 'Here is the image you requested:', image: imageUrl, isTyping: false } : m));
                 }
-
             } else {
                  await sendMessageStream(text, (chunk) => {
                     setMessages((prev) =>
@@ -238,6 +251,8 @@ const App: React.FC = () => {
             setIsLive(false);
         } else {
             setIsLive(true);
+            setLiveTranscript({ user: '', assistant: '' });
+            liveTranscriptRef.current = { user: '', assistant: '' };
             try {
                 if (!outputAudioContextRef.current) {
                     outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -262,39 +277,49 @@ const App: React.FC = () => {
                             scriptProcessor.connect(inputAudioContext.destination);
                         },
                         onmessage: async (message: LiveServerMessage) => {
+                            // Handle audio
                             const base64EncodedAudioString =
                                 message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
-
                             if (base64EncodedAudioString && outputAudioContextRef.current) {
                                 const ctx = outputAudioContextRef.current;
-                                nextStartTimeRef.current = Math.max(
-                                    nextStartTimeRef.current,
-                                    ctx.currentTime,
-                                );
-                                const audioBuffer = await decodeAudioData(
-                                    decode(base64EncodedAudioString),
-                                    ctx,
-                                    24000,
-                                    1,
-                                );
+                                nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
+                                const audioBuffer = await decodeAudioData(decode(base64EncodedAudioString), ctx, 24000, 1);
                                 const sourceNode = ctx.createBufferSource();
                                 sourceNode.buffer = audioBuffer;
                                 sourceNode.connect(ctx.destination);
-                                sourceNode.addEventListener('ended', () => {
-                                    audioSourcesRef.current.delete(sourceNode);
-                                });
-
+                                sourceNode.addEventListener('ended', () => { audioSourcesRef.current.delete(sourceNode); });
                                 sourceNode.start(nextStartTimeRef.current);
                                 nextStartTimeRef.current = nextStartTimeRef.current + audioBuffer.duration;
                                 audioSourcesRef.current.add(sourceNode);
                             }
-
                             if (message.serverContent?.interrupted) {
-                                for (const source of audioSourcesRef.current.values()) {
-                                    source.stop();
-                                }
+                                for (const source of audioSourcesRef.current.values()) { source.stop(); }
                                 audioSourcesRef.current.clear();
                                 nextStartTimeRef.current = 0;
+                            }
+
+                            // Handle transcription
+                            if (message.serverContent?.inputTranscription) {
+                                liveTranscriptRef.current.user += message.serverContent.inputTranscription.text;
+                            }
+                             if (message.serverContent?.outputTranscription) {
+                                liveTranscriptRef.current.assistant += message.serverContent.outputTranscription.text;
+                            }
+                            setLiveTranscript({ ...liveTranscriptRef.current });
+                            
+                            if (message.serverContent?.turnComplete) {
+                                const fullUserInput = liveTranscriptRef.current.user;
+                                const fullAssistantOutput = liveTranscriptRef.current.assistant;
+                                
+                                if (fullUserInput.trim()) {
+                                    setMessages(prev => [...prev, { id: Date.now().toString(), sender: MessageSender.User, text: fullUserInput.trim() }]);
+                                }
+                                if (fullAssistantOutput.trim()) {
+                                    setMessages(prev => [...prev, { id: (Date.now()+1).toString(), sender: MessageSender.Assistant, text: fullAssistantOutput.trim() }]);
+                                }
+                                
+                                liveTranscriptRef.current = { user: '', assistant: '' };
+                                setLiveTranscript({ user: '', assistant: '' });
                             }
                         },
                         onerror: (e: ErrorEvent) => {
@@ -310,6 +335,8 @@ const App: React.FC = () => {
                         responseModalities: [Modality.AUDIO],
                         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceId } } },
                         systemInstruction: getSystemInstruction(currentPersonality, currentMode, isUpgraded, userName),
+                        inputAudioTranscription: {},
+                        outputAudioTranscription: {},
                     },
                 });
                 setLiveSession(await sessionPromise);
@@ -333,7 +360,7 @@ const App: React.FC = () => {
                 history={history}
                 onLoadChat={handleLoadChat}
             />
-            <main className="flex-1 flex flex-col">
+            <main className="flex-1 flex flex-col relative">
                  <div className="flex-shrink-0 h-20 flex items-center justify-center">
                     {!isUpgraded && (
                         <button
@@ -346,6 +373,7 @@ const App: React.FC = () => {
                     )}
                 </div>
                 <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} />
+                {isLive && <LiveTranscriptionOverlay transcript={liveTranscript} />}
                 <InputBar onSendMessage={handleSendMessage} isLoading={isLoading} isLive={isLive} onToggleLive={handleToggleLiveMode} />
             </main>
             <OnboardingModal show={showOnboarding} onSave={handleNameSave} />

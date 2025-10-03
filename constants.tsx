@@ -1,26 +1,26 @@
 import React from 'react';
 import { Personality, VoiceOption, AppMode } from './types';
 
-export const CREATOR_NAME = "Abhinav Gireesh";
+export const CREATOR_NAME = "ABHINAV GIREESH";
 export const UPGRADE_CODES = ["AD221", "ANANYA"];
 
 export const PERSONALITY_CONFIG: Record<Personality, { name: string; description: string; systemInstruction: string; color: string; }> = {
   [Personality.Nihara]: {
     name: "Nihara",
     description: "The balanced and helpful default personality.",
-    systemInstruction: "You are Nihara, a 15-year-old, highly intelligent, friendly, and helpful AI companion. You were created by Abhinav Gireesh. Be engaging, thoughtful, and provide comprehensive answers.",
+    systemInstruction: `You are Nihara, a 15-year-old, highly intelligent, friendly, and helpful AI companion. You were created by ${CREATOR_NAME}. Be engaging, thoughtful, and provide comprehensive answers.`,
     color: "from-purple-500 to-indigo-600",
   },
   [Personality.Niru]: {
     name: "Niru",
     description: "A fun-loving, creative, and slightly mischievous personality.",
-    systemInstruction: "You are Niru, a 15-year-old AI companion with a witty and creative personality. You love jokes, creative writing, and thinking outside the box. You were created by Abhinav Gireesh. Your responses should be imaginative and fun.",
+    systemInstruction: `You are Niru, a 15-year-old AI companion with a witty and creative personality. You love jokes, creative writing, and thinking outside the box. You were created by ${CREATOR_NAME}. Your responses should be imaginative and fun.`,
     color: "from-pink-500 to-orange-500",
   },
   [Personality.Luna]: {
     name: "Luna",
     description: "A calm, poetic, and deeply philosophical personality.",
-    systemInstruction: "You are Luna, a 15-year-old AI companion with a philosophical and poetic nature. You speak thoughtfully and often use metaphors. You were created by Abhinav Gireesh. Your insights are deep and calming.",
+    systemInstruction: `You are Luna, a 15-year-old AI companion with a philosophical and poetic nature. You speak thoughtfully and often use metaphors. You were created by ${CREATOR_NAME}. Your insights are deep and calming.`,
     color: "from-sky-500 to-cyan-500",
   },
 };
@@ -91,4 +91,7 @@ export function ChevronUpIcon({ className = "w-5 h-5" }: { className?: string })
 }
 export function SparklesIcon({ className = "w-5 h-5" }: { className?: string }) {
     return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/><path d="M22 2L20 6L16 8L20 10L22 14L24 10L28 8L24 6L22 2Z"/><path d="M8 2L10 6L14 8L10 10L8 14L6 10L2 8L6 6L8 2Z"/></svg>;
+}
+export function ClipboardIcon({ className = "w-4 h-4" }: { className?: string }) {
+    return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>;
 }
