@@ -41,7 +41,7 @@ export function NiharaIcon({ className = "w-8 h-8" }: { className?: string }) {
         <path d="M12 0.5C11.1716 0.5 10.5 1.17157 10.5 2C10.5 2.82843 11.1716 3.5 12 3.5C12.8284 3.5 13.5 2.82843 13.5 2C13.5 1.17157 12.8284 0.5 12 0.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
         <path d="M22 13C22 13.8284 21.3284 14.5 20.5 14.5C19.6716 14.5 19 13.8284 19 13C19 12.1716 19.6716 11.5 20.5 11.5C21.3284 11.5 22 12.1716 22 13Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
         <path d="M3.5 13C3.5 13.8284 2.82843 14.5 2 14.5C1.17157 14.5 0.5 13.8284 0.5 13C0.5 12.1716 1.17157 11.5 2 11.5C2.82843 11.5 3.5 12.1716 3.5 13Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M12 20.5C11.1716 20.5 10.5 21.1716 10.5 22C10.5 22.8284 11.1716 23.5 12 23.5C12.8284 23.5 13.5 22.8284 13.5 22C13.5 21.1716 12.8284 20.5 12 20.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M12 20.5C11.1716 20.5 10.5 21.1716 10.5 22C10.5 22.8284 11.1716 23.5 12 23.5C12.8284 23.5 13.5 22.8284 13.5 22C13.5 21.1716 12.8284 20.5 12 20.5Z" stroke="currentColor" strokeWidth="1.js" strokeLinecap="round" strokeLinejoin="round"/>
         <path d="M12 8.00195C14.76 8.00195 17 10.2419 17 13.0019C17 15.7619 14.76 18.0019 12 18.0019C9.24 18.0019 7 15.7619 7 13.0019C7 10.2419 9.24 8.00195 12 8.00195Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     );
@@ -94,4 +94,10 @@ export function SparklesIcon({ className = "w-5 h-5" }: { className?: string }) 
 }
 export function ClipboardIcon({ className = "w-4 h-4" }: { className?: string }) {
     return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>;
+}
+export function MenuIcon({ className = "w-6 h-6" }: { className?: string }) {
+    return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>;
+}
+export function XIcon({ className = "w-6 h-6" }: { className?: string }) {
+    return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
 }

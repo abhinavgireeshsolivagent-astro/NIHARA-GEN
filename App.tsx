@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LiveServerMessage, Modality, Blob } from '@google/genai';
 import Sidebar from './components/Sidebar';
@@ -9,7 +6,7 @@ import InputBar from './components/InputBar';
 import { OnboardingModal, UpgradeModal, SettingsModal } from './components/Modals';
 import { Personality, MessageSender, ChatMessage, AppMode, ChatHistory } from './types';
 import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch, getAiClient } from './services/geminiService';
-import { SparklesIcon } from './constants';
+import { SparklesIcon, MenuIcon } from './constants';
 
 // Audio Encoding/Decoding utilities
 function encode(bytes: Uint8Array) {
@@ -83,6 +80,9 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [showUpgradeModal, setShowUpgradeModal] = useState<boolean>(false);
     const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+    
+    // Responsive State
+    const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
     
     // History State
     const [history, setHistory] = useState<ChatHistory[]>([]);
@@ -201,7 +201,7 @@ const App: React.FC = () => {
                 const systemInstruction = getSystemInstruction(currentPersonality, currentMode, isUpgraded, userName);
                 const { text: responseText, sources } = await sendMessageWithSearch(text, systemInstruction);
                 setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: responseText, sources: sources, isTyping: false } : m));
-            } else if (currentMode === AppMode.ImageGen && (file || text.toLowerCase().includes("generate") || text.toLowerCase().includes("create"))) {
+            } else if (currentMode === AppMode.ImageGen) {
                 const base64Image = file ? (await fileToDataUrl(file)).split(',')[1] : undefined;
                 const mimeType = file ? file.type : undefined;
                 
@@ -366,18 +366,26 @@ const App: React.FC = () => {
                 isUpgraded={isUpgraded}
                 history={history}
                 onLoadChat={handleLoadChat}
+                isSidebarOpen={isSidebarOpen}
+                setIsSidebarOpen={setIsSidebarOpen}
             />
             <main className="flex-1 flex flex-col relative">
-                 <div className="flex-shrink-0 h-20 flex items-center justify-center">
-                    {!isUpgraded && (
-                        <button
-                            onClick={() => setShowUpgradeModal(true)}
-                            className="text-gray-400 font-medium text-xs py-1.5 px-3 rounded-full hover:bg-white/10 hover:text-white transition-colors flex items-center gap-1.5"
-                        >
-                            <SparklesIcon className="text-yellow-400 w-4 h-4" />
-                            <span>Upgrade to Mega Pro</span>
-                        </button>
-                    )}
+                 <div className="flex-shrink-0 h-20 flex items-center justify-between px-6 md:justify-center">
+                    <button onClick={() => setIsSidebarOpen(true)} className="md:hidden p-2 -ml-2 text-gray-300 hover:text-white">
+                        <MenuIcon />
+                    </button>
+                    <div className="flex items-center">
+                        {!isUpgraded && (
+                            <button
+                                onClick={() => setShowUpgradeModal(true)}
+                                className="text-gray-400 font-medium text-xs py-1.5 px-3 rounded-full hover:bg-white/10 hover:text-white transition-colors flex items-center gap-1.5"
+                            >
+                                <SparklesIcon className="text-yellow-400 w-4 h-4" />
+                                <span>Upgrade to Mega Pro</span>
+                            </button>
+                        )}
+                    </div>
+                    <div className="w-6 md:hidden" /> {/* Spacer for mobile to center the upgrade button */}
                 </div>
                 <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} />
                 {isLive && <LiveTranscriptionOverlay transcript={liveTranscript} />}
