@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LiveServerMessage, Modality, Blob } from '@google/genai';
 import Sidebar from './components/Sidebar';
@@ -6,7 +7,8 @@ import ChatView from './components/ChatView';
 import InputBar from './components/InputBar';
 import { OnboardingModal, UpgradeModal, SettingsModal } from './components/Modals';
 import { Personality, MessageSender, ChatMessage, AppMode, ChatHistory } from './types';
-import { ai, startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch } from './services/geminiService';
+// FIX: Import `getAiClient` to resolve reference error when starting a live session.
+import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch, isAiAvailable, getAiClient } from './services/geminiService';
 import { SparklesIcon } from './constants';
 
 // Audio Encoding/Decoding utilities
@@ -123,7 +125,7 @@ const App: React.FC = () => {
     };
     
     const startNewChat = useCallback(() => {
-        if (userName && currentMode !== AppMode.DeepResearch) {
+        if (isAiAvailable && userName && currentMode !== AppMode.DeepResearch) {
              startChat(currentPersonality, currentMode, isUpgraded, userName);
         }
     }, [currentPersonality, currentMode, isUpgraded, userName]);
@@ -156,15 +158,8 @@ const App: React.FC = () => {
         try {
             startNewChat();
         } catch (e) {
+            // This error is now handled globally by the UI, but we can log it.
             console.error("Failed to start new chat session:", e);
-            if (e instanceof Error) {
-                // Display initial error in chat view if service is unavailable
-                setMessages([{
-                    id: 'init-error',
-                    sender: MessageSender.Assistant,
-                    text: e.message
-                }]);
-            }
         }
     }, [currentPersonality, currentMode, isUpgraded, userName]);
 
@@ -257,9 +252,9 @@ const App: React.FC = () => {
     };
     
     const handleToggleLiveMode = async () => {
-        if (!ai) {
+        if (!isAiAvailable) {
+            // UI should prevent this, but as a safeguard:
             alert("Live mode is not available. Please ensure the API Key is configured correctly in your deployment environment.");
-            setIsLive(false);
             return;
         }
 
@@ -278,7 +273,7 @@ const App: React.FC = () => {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
                 
-                const sessionPromise = ai.live.connect({
+                const sessionPromise = getAiClient().live.connect({
                     model: 'gemini-2.5-flash-native-audio-preview-09-2025',
                     callbacks: {
                         onopen: () => {
@@ -390,9 +385,9 @@ const App: React.FC = () => {
                         </button>
                     )}
                 </div>
-                <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} />
+                <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} isAiAvailable={isAiAvailable} />
                 {isLive && <LiveTranscriptionOverlay transcript={liveTranscript} />}
-                <InputBar onSendMessage={handleSendMessage} isLoading={isLoading} isLive={isLive} onToggleLive={handleToggleLiveMode} />
+                <InputBar onSendMessage={handleSendMessage} isLoading={isLoading} isLive={isLive} onToggleLive={handleToggleLiveMode} isAiAvailable={isAiAvailable} />
             </main>
             <OnboardingModal show={showOnboarding} onSave={handleNameSave} />
             <UpgradeModal 

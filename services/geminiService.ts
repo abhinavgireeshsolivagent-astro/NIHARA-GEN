@@ -1,16 +1,27 @@
 
+
+
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality } from "@google/genai";
 import { Personality, AppMode, ChatMessage } from '../types';
 import { PERSONALITY_CONFIG } from '../constants';
 
 // Safely access the API key and initialize the AI client.
-// This prevents the app from crashing if the environment variable is not set.
 const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-export const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+
+// Export a flag to indicate if the AI service is available.
+export const isAiAvailable = !!ai;
 
 let chatSession: Chat | null = null;
 
 const AI_UNAVAILABLE_ERROR = "AI Service is not available. Please ensure the API Key is configured correctly in your deployment environment.";
+
+// Centralized AI client getter to avoid null checks everywhere.
+// FIX: Export the getAiClient function to make it accessible from other modules.
+export function getAiClient(): GoogleGenAI {
+    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
+    return ai;
+}
 
 export function getSystemInstruction(personality: Personality, mode: AppMode, isUpgraded: boolean, userName: string): string {
     let baseInstruction = PERSONALITY_CONFIG[personality].systemInstruction;
@@ -41,10 +52,8 @@ export function getSystemInstruction(personality: Personality, mode: AppMode, is
 
 
 export function startChat(personality: Personality, mode: AppMode, isUpgraded: boolean, userName: string): Chat {
-    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
-    
     const systemInstruction = getSystemInstruction(personality, mode, isUpgraded, userName);
-    chatSession = ai.chats.create({
+    chatSession = getAiClient().chats.create({
         model: 'gemini-2.5-flash',
         config: {
             systemInstruction: systemInstruction,
@@ -55,7 +64,7 @@ export function startChat(personality: Personality, mode: AppMode, isUpgraded: b
 
 
 export async function sendMessage(message: string): Promise<GenerateContentResponse> {
-    if (!ai || !chatSession) {
+    if (!chatSession) {
         throw new Error("Chat not initialized. " + AI_UNAVAILABLE_ERROR);
     }
     return await chatSession.sendMessage({ message });
@@ -65,7 +74,7 @@ export async function sendMessageStream(
     message: string,
     onChunk: (chunk: string) => void
 ): Promise<void> {
-    if (!ai || !chatSession) {
+    if (!chatSession) {
         throw new Error("Chat not initialized. " + AI_UNAVAILABLE_ERROR);
     }
     const result = await chatSession.sendMessageStream({ message });
@@ -78,9 +87,7 @@ export async function sendMessageWithSearch(
     message: string,
     systemInstruction: string,
 ): Promise<{ text: string; sources: ChatMessage['sources'] }> {
-    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
-    
-    const response = await ai.models.generateContent({
+    const response = await getAiClient().models.generateContent({
         model: "gemini-2.5-flash",
         contents: message,
         config: {
@@ -97,11 +104,8 @@ export async function sendMessageWithSearch(
 }
 
 
-// FIX: Replaced generateOrEditImage with two separate functions for clarity and to use the correct models.
 export async function generateImage(prompt: string): Promise<string> {
-    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
-
-    const response = await ai.models.generateImages({
+    const response = await getAiClient().models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: prompt,
         config: {
@@ -116,8 +120,6 @@ export async function generateImage(prompt: string): Promise<string> {
 }
 
 export async function editImage(prompt: string, base64Image: string, mimeType: string): Promise<GenerateContentResponse> {
-    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
-    
     const parts = [
         {
             inlineData: {
@@ -128,7 +130,7 @@ export async function editImage(prompt: string, base64Image: string, mimeType: s
         { text: prompt }
     ];
 
-    return await ai.models.generateContent({
+    return await getAiClient().models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: {
             parts: parts,
