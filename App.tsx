@@ -1,14 +1,13 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
+import { LiveServerMessage, Modality, Blob } from '@google/genai';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/ChatView';
 import InputBar from './components/InputBar';
 import { OnboardingModal, UpgradeModal, SettingsModal } from './components/Modals';
 import { Personality, MessageSender, ChatMessage, AppMode, ChatHistory } from './types';
-import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch } from './services/geminiService';
+import { ai, startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch } from './services/geminiService';
 import { SparklesIcon } from './constants';
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Audio Encoding/Decoding utilities
 function encode(bytes: Uint8Array) {
@@ -154,7 +153,19 @@ const App: React.FC = () => {
         saveCurrentChat();
         setMessages([]);
         currentChatIdRef.current = Date.now().toString();
-        startNewChat();
+        try {
+            startNewChat();
+        } catch (e) {
+            console.error("Failed to start new chat session:", e);
+            if (e instanceof Error) {
+                // Display initial error in chat view if service is unavailable
+                setMessages([{
+                    id: 'init-error',
+                    sender: MessageSender.Assistant,
+                    text: e.message
+                }]);
+            }
+        }
     }, [currentPersonality, currentMode, isUpgraded, userName]);
 
 
@@ -228,7 +239,8 @@ const App: React.FC = () => {
                 });
             }
         } catch(e) {
-             setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: "Sorry, I encountered an error.", isTyping: false } : m));
+             const errorMessage = e instanceof Error ? e.message : "Sorry, I encountered an error.";
+             setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: errorMessage, isTyping: false } : m));
              console.error(e);
         } finally {
              setIsLoading(false);
@@ -245,6 +257,12 @@ const App: React.FC = () => {
     };
     
     const handleToggleLiveMode = async () => {
+        if (!ai) {
+            alert("Live mode is not available. Please ensure the API Key is configured correctly in your deployment environment.");
+            setIsLive(false);
+            return;
+        }
+
         if(isLive) {
             liveSession?.close();
             setLiveSession(null);

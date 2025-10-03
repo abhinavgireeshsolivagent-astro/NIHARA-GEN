@@ -1,13 +1,16 @@
+
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality } from "@google/genai";
 import { Personality, AppMode, ChatMessage } from '../types';
 import { PERSONALITY_CONFIG } from '../constants';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable is not set.");
-}
+// Safely access the API key and initialize the AI client.
+// This prevents the app from crashing if the environment variable is not set.
+const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+export const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 let chatSession: Chat | null = null;
+
+const AI_UNAVAILABLE_ERROR = "AI Service is not available. Please ensure the API Key is configured correctly in your deployment environment.";
 
 export function getSystemInstruction(personality: Personality, mode: AppMode, isUpgraded: boolean, userName: string): string {
     let baseInstruction = PERSONALITY_CONFIG[personality].systemInstruction;
@@ -38,6 +41,8 @@ export function getSystemInstruction(personality: Personality, mode: AppMode, is
 
 
 export function startChat(personality: Personality, mode: AppMode, isUpgraded: boolean, userName: string): Chat {
+    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
+    
     const systemInstruction = getSystemInstruction(personality, mode, isUpgraded, userName);
     chatSession = ai.chats.create({
         model: 'gemini-2.5-flash',
@@ -50,8 +55,8 @@ export function startChat(personality: Personality, mode: AppMode, isUpgraded: b
 
 
 export async function sendMessage(message: string): Promise<GenerateContentResponse> {
-    if (!chatSession) {
-        throw new Error("Chat not initialized. Call startChat first.");
+    if (!ai || !chatSession) {
+        throw new Error("Chat not initialized. " + AI_UNAVAILABLE_ERROR);
     }
     return await chatSession.sendMessage({ message });
 }
@@ -60,8 +65,8 @@ export async function sendMessageStream(
     message: string,
     onChunk: (chunk: string) => void
 ): Promise<void> {
-    if (!chatSession) {
-        throw new Error("Chat not initialized. Call startChat first.");
+    if (!ai || !chatSession) {
+        throw new Error("Chat not initialized. " + AI_UNAVAILABLE_ERROR);
     }
     const result = await chatSession.sendMessageStream({ message });
     for await (const chunk of result) {
@@ -73,6 +78,8 @@ export async function sendMessageWithSearch(
     message: string,
     systemInstruction: string,
 ): Promise<{ text: string; sources: ChatMessage['sources'] }> {
+    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
+    
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: message,
@@ -92,6 +99,8 @@ export async function sendMessageWithSearch(
 
 // FIX: Replaced generateOrEditImage with two separate functions for clarity and to use the correct models.
 export async function generateImage(prompt: string): Promise<string> {
+    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
+
     const response = await ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: prompt,
@@ -107,6 +116,8 @@ export async function generateImage(prompt: string): Promise<string> {
 }
 
 export async function editImage(prompt: string, base64Image: string, mimeType: string): Promise<GenerateContentResponse> {
+    if (!ai) throw new Error(AI_UNAVAILABLE_ERROR);
+    
     const parts = [
         {
             inlineData: {
