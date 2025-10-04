@@ -1,19 +1,14 @@
-
-
-
 import { GoogleGenAI, Chat, GenerateContentResponse, Modality } from "@google/genai";
 import { Personality, AppMode, ChatMessage } from '../types';
 import { PERSONALITY_CONFIG } from '../constants';
 
-// Hardcode the API key to ensure the service is always available on deployment.
-const apiKey = 'AIzaSyAV0dcRC6m7sYMm69OuE2cuM9vQV2ZY2uc';
-const ai = new GoogleGenAI({ apiKey });
+// Adhere to the API key guideline.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 let chatSession: Chat | null = null;
 
 // Centralized AI client getter.
 export function getAiClient(): GoogleGenAI {
-    // The 'ai' instance is guaranteed to be initialized with the hardcoded key.
     return ai;
 }
 
@@ -37,6 +32,9 @@ export function getSystemInstruction(personality: Personality, mode: AppMode, is
             break;
         case AppMode.StudyBuddy:
             baseInstruction += " You are in Study & Learn mode. Act as a helpful and patient tutor. Explain concepts clearly, create quizzes, and help the user learn new topics.";
+            break;
+        case AppMode.AstroGuide:
+            baseInstruction += " You are in Astro Guide mode. You are a wise and modern astrologer. Provide insightful, personalized astrological readings and guidance. You can talk about zodiac signs, horoscopes, birth charts, and planetary alignments with a mystical yet accessible tone. Make the user feel understood and empowered by the stars.";
             break;
         default: // Chat mode
             break;

@@ -25,6 +25,7 @@ export enum AppMode {
     DeepResearch = 'Deep Research',
     CodeWriter = 'Write Code',
     StudyBuddy = 'Study & Learn',
+    AstroGuide = 'Astro Guide',
 }
 
 export interface VoiceOption {

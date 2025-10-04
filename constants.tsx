@@ -2,7 +2,7 @@ import React from 'react';
 import { Personality, VoiceOption, AppMode } from './types';
 
 export const CREATOR_NAME = "ABHINAV GIREESH";
-export const UPGRADE_CODES = ["AD221", "ANANYA"];
+export const UPGRADE_CODES = ["AD221", "ANANYA", "ANANYA BALAKRISHNAN", "RAJITHA", "DRISHYA", "GIREESH"];
 
 export const PERSONALITY_CONFIG: Record<Personality, { name: string; description: string; systemInstruction: string; color: string; }> = {
   [Personality.Nihara]: {
@@ -61,6 +61,21 @@ export function CodeIcon({ className = "w-5 h-5" }: { className?: string }) {
 export function BookOpenIcon({ className = "w-5 h-5" }: { className?: string }) {
     return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>;
 }
+export function ZodiacIcon({ className = "w-5 h-5" }: { className?: string }) {
+    return (
+        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a10 10 0 1 0 10 10" />
+            <path d="M12 22v-4" />
+            <path d="M12 2v4" />
+            <path d="M22 12h-4" />
+            <path d="M2 12h4" />
+            <path d="m15.54 8.46-2.83 2.83" />
+            <path d="m8.46 15.54 2.83-2.83" />
+            <path d="M15.54 15.54 12 12" />
+            <path d="m8.46 8.46 2.83 2.83" />
+        </svg>
+    );
+}
 
 // FIX: Storing component references instead of elements and defining after icon components are defined.
 export const APP_MODES: { mode: AppMode; icon: React.FC<{ className?: string }> }[] = [
@@ -69,6 +84,7 @@ export const APP_MODES: { mode: AppMode; icon: React.FC<{ className?: string }> 
     { mode: AppMode.DeepResearch, icon: SearchIcon },
     { mode: AppMode.CodeWriter, icon: CodeIcon },
     { mode: AppMode.StudyBuddy, icon: BookOpenIcon },
+    { mode: AppMode.AstroGuide, icon: ZodiacIcon },
 ];
 
 export function MicIcon({ className = "w-6 h-6" }: { className?: string }) {

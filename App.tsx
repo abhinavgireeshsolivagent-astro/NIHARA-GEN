@@ -6,7 +6,7 @@ import InputBar from './components/InputBar';
 import { OnboardingModal, UpgradeModal, SettingsModal } from './components/Modals';
 import { Personality, MessageSender, ChatMessage, AppMode, ChatHistory } from './types';
 import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch, getAiClient } from './services/geminiService';
-import { SparklesIcon, MenuIcon } from './constants';
+import { SparklesIcon, MenuIcon, PERSONALITY_CONFIG } from './constants';
 
 // Audio Encoding/Decoding utilities
 function encode(bytes: Uint8Array) {
@@ -60,15 +60,40 @@ function createBlobFromAudio(data: Float32Array): Blob {
     };
 }
 
-const LiveTranscriptionOverlay: React.FC<{ transcript: { user: string; assistant: string } }> = ({ transcript }) => (
-    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-10 transcription-overlay">
-        <div className="glassmorphic rounded-xl p-4 text-sm text-gray-300 shadow-2xl">
-            {transcript.user && <p><span className="font-bold text-white">You:</span> {transcript.user}</p>}
-            {transcript.assistant && <p className="mt-1"><span className="font-bold text-purple-300">Nihara:</span> {transcript.assistant}</p>}
-        </div>
-    </div>
-);
+const LiveModeView: React.FC<{
+    transcript: { user: string; assistant: string };
+    personality: Personality;
+    isUpgraded: boolean;
+    onToggleLive: () => void;
+}> = ({ transcript, personality, isUpgraded, onToggleLive }) => {
+    const config = PERSONALITY_CONFIG[personality];
+    const orbColor = isUpgraded ? 'from-yellow-400 via-orange-500 to-red-600' : config.color;
 
+    return (
+        <div className="flex-1 flex flex-col items-center justify-center relative chat-view-bg animate-fade-in-blur">
+            <div className={`relative w-64 h-64 md:w-80 md:h-80 rounded-full flex items-center justify-center bg-gradient-to-br ${orbColor} pulse-orb-animation`}>
+                <div className="absolute inset-2 bg-gray-900 rounded-full"></div>
+                <div className={`absolute inset-4 glassmorphic rounded-full ${isUpgraded ? 'mega-pro-glow' : ''}`}></div>
+                <div className="relative z-10 p-4 text-center">
+                    <p className="text-2xl font-bold mb-2">Listening...</p>
+                    <p className="text-gray-400 text-sm">Nihara is actively listening.</p>
+                </div>
+            </div>
+
+            <div className="absolute bottom-0 left-0 right-0 p-6 max-h-48 overflow-y-auto">
+                <div className="w-full max-w-3xl mx-auto glassmorphic rounded-xl p-4 text-gray-300 shadow-2xl text-lg">
+                    {transcript.user && <p className="transition-opacity duration-300"><span className="font-bold text-white">You:</span> {transcript.user}</p>}
+                    {transcript.assistant && <p className="mt-2 transition-opacity duration-300"><span className={`font-bold text-transparent bg-clip-text bg-gradient-to-r ${config.color}`}>Nihara:</span> {transcript.assistant}</p>}
+                    {(!transcript.user && !transcript.assistant) && <p className="text-gray-500 text-center">Speak to begin the conversation...</p>}
+                </div>
+            </div>
+
+            <button onClick={onToggleLive} className="absolute top-6 right-6 bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition-colors z-20">
+                End Live Session
+            </button>
+        </div>
+    );
+};
 
 const App: React.FC = () => {
     const [userName, setUserName] = useState<string>('');
@@ -387,9 +412,17 @@ const App: React.FC = () => {
                     </div>
                     <div className="w-6 md:hidden" /> {/* Spacer for mobile to center the upgrade button */}
                 </div>
-                <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} />
-                {isLive && <LiveTranscriptionOverlay transcript={liveTranscript} />}
-                <InputBar onSendMessage={handleSendMessage} isLoading={isLoading} isLive={isLive} onToggleLive={handleToggleLiveMode} />
+                {isLive ? (
+                    <LiveModeView
+                        transcript={liveTranscript}
+                        personality={currentPersonality}
+                        isUpgraded={isUpgraded}
+                        onToggleLive={handleToggleLiveMode}
+                    />
+                ) : (
+                    <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} />
+                )}
+                {!isLive && <InputBar onSendMessage={handleSendMessage} isLoading={isLoading} isLive={isLive} onToggleLive={handleToggleLiveMode} />}
             </main>
             <OnboardingModal show={showOnboarding} onSave={handleNameSave} />
             <UpgradeModal 

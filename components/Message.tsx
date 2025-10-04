@@ -6,7 +6,7 @@ interface MessageProps {
   message: ChatMessage;
   isUpgraded: boolean;
   personality: Personality;
-  userName: string;
+  userName:string;
 }
 
 const TypingIndicator = () => (
@@ -77,7 +77,7 @@ const Message: React.FC<MessageProps> = ({ message, isUpgraded, personality, use
   const animationClass = isUser ? 'animate-message-in-right' : 'animate-message-in-left';
   const bubbleClasses = isUser
     ? 'bg-gradient-to-br from-purple-600 to-indigo-700 text-white rounded-br-none'
-    : 'bg-gray-700/80 text-gray-200 rounded-bl-none';
+    : 'bg-gradient-to-br from-gray-700 to-gray-800 text-gray-200 rounded-bl-none';
   
   const megaProBubbleWrapper = !isUser && isUpgraded ? 'mega-pro-glow p-0.5 rounded-2xl' : '';
 
