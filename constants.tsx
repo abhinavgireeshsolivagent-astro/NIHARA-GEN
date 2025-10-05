@@ -76,8 +76,10 @@ export function ZodiacIcon({ className = "w-5 h-5" }: { className?: string }) {
         </svg>
     );
 }
+export function JournalIcon({ className = "w-5 h-5" }: { className?: string }) {
+    return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h11m6-6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM3 4v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z"/></svg>;
+}
 
-// FIX: Storing component references instead of elements and defining after icon components are defined.
 export const APP_MODES: { mode: AppMode; icon: React.FC<{ className?: string }> }[] = [
     { mode: AppMode.Chat, icon: MessageSquareIcon },
     { mode: AppMode.ImageGen, icon: ImageIcon },
@@ -85,6 +87,7 @@ export const APP_MODES: { mode: AppMode; icon: React.FC<{ className?: string }> 
     { mode: AppMode.CodeWriter, icon: CodeIcon },
     { mode: AppMode.StudyBuddy, icon: BookOpenIcon },
     { mode: AppMode.AstroGuide, icon: ZodiacIcon },
+    { mode: AppMode.AIDiary, icon: JournalIcon },
 ];
 
 export function MicIcon({ className = "w-6 h-6" }: { className?: string }) {

@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { LiveServerMessage, Modality, Blob } from '@google/genai';
+import { LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/ChatView';
 import InputBar from './components/InputBar';
+import DiaryView from './components/DiaryView';
+import ImageGenView from './components/ImageGenView';
+import LiveView from './components/LiveView';
 import { OnboardingModal, UpgradeModal, SettingsModal } from './components/Modals';
-import { Personality, MessageSender, ChatMessage, AppMode, ChatHistory } from './types';
-import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch, getAiClient } from './services/geminiService';
-import { SparklesIcon, MenuIcon, PERSONALITY_CONFIG } from './constants';
+import { Personality, MessageSender, ChatMessage, AppMode, ChatHistory, DiaryEntry, GeneratedImage } from './types';
+import { startChat, sendMessageStream, generateImage, editImage, getSystemInstruction, sendMessageWithSearch, getAiClient, analyzeSentiment, extractMemory } from './services/geminiService';
+import { SparklesIcon, MenuIcon } from './constants';
 
 // Audio Encoding/Decoding utilities
 function encode(bytes: Uint8Array) {
@@ -60,44 +63,37 @@ function createBlobFromAudio(data: Float32Array): Blob {
     };
 }
 
-const LiveModeView: React.FC<{
-    transcript: { user: string; assistant: string };
-    personality: Personality;
-    isUpgraded: boolean;
-    onToggleLive: () => void;
-    micLevel: number;
-}> = ({ transcript, personality, isUpgraded, onToggleLive, micLevel }) => {
-    const config = PERSONALITY_CONFIG[personality];
-    const orbColor = isUpgraded ? 'from-yellow-400 via-orange-500 to-red-600' : config.color;
-    const orbScale = 1 + micLevel * 0.5;
+// Function Declarations for Live Mode Voice Commands
+const changePersonalityDeclaration: FunctionDeclaration = {
+    name: 'changePersonality',
+    description: "Changes the AI's personality.",
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            personality: {
+                type: Type.STRING,
+                description: 'The personality to switch to.',
+                enum: Object.values(Personality),
+            },
+        },
+        required: ['personality'],
+    },
+};
 
-    return (
-        <div className="flex-1 flex flex-col items-center justify-center relative chat-view-bg animate-fade-in-blur">
-            <div 
-                className={`relative w-64 h-64 md:w-80 md:h-80 rounded-full flex items-center justify-center bg-gradient-to-br ${orbColor} pulse-orb-animation`}
-                style={{ transform: `scale(${orbScale})`, transition: 'transform 0.1s ease-out' }}
-            >
-                <div className="absolute inset-2 bg-gray-900 rounded-full"></div>
-                <div className={`absolute inset-4 glassmorphic rounded-full ${isUpgraded ? 'mega-pro-glow' : ''}`}></div>
-                <div className="relative z-10 p-4 text-center">
-                    <p className="text-2xl font-bold mb-2">Listening...</p>
-                    <p className="text-gray-400 text-sm">Nihara is actively listening.</p>
-                </div>
-            </div>
-
-            <div className="absolute bottom-0 left-0 right-0 p-6 max-h-48 overflow-y-auto">
-                <div className="w-full max-w-3xl mx-auto glassmorphic rounded-xl p-4 text-gray-300 shadow-2xl text-lg">
-                    {transcript.user && <p className="transition-opacity duration-300"><span className="font-bold text-white">You:</span> {transcript.user}</p>}
-                    {transcript.assistant && <p className="mt-2 transition-opacity duration-300"><span className={`font-bold text-transparent bg-clip-text bg-gradient-to-r ${config.color}`}>Nihara:</span> {transcript.assistant}</p>}
-                    {(!transcript.user && !transcript.assistant) && <p className="text-gray-500 text-center">Speak to begin the conversation...</p>}
-                </div>
-            </div>
-
-            <button onClick={onToggleLive} className="absolute top-6 right-6 bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition-colors z-20">
-                End Live Session
-            </button>
-        </div>
-    );
+const changeModeDeclaration: FunctionDeclaration = {
+    name: 'changeMode',
+    description: "Changes the AI's operational mode.",
+    parameters: {
+        type: Type.OBJECT,
+        properties: {
+            mode: {
+                type: Type.STRING,
+                description: 'The mode to switch to.',
+                enum: Object.values(AppMode).filter(m => m !== AppMode.AIDiary),
+            },
+        },
+        required: ['mode'],
+    },
 };
 
 const App: React.FC = () => {
@@ -120,7 +116,9 @@ const App: React.FC = () => {
 
     // Live Mode State
     const [isLive, setIsLive] = useState<boolean>(false);
-    const [liveSession, setLiveSession] = useState<any>(null);
+    const [liveStatus, setLiveStatus] = useState<'listening' | 'speaking' | 'thinking' | 'idle'>('idle');
+    const [liveActionStatus, setLiveActionStatus] = useState<string | null>(null);
+    const liveSessionPromiseRef = useRef<Promise<any> | null>(null);
     const [liveTranscript, setLiveTranscript] = useState({ user: '', assistant: '' });
     const liveTranscriptRef = useRef({ user: '', assistant: '' });
     const [voiceId, setVoiceId] = useState<string>('Zephyr');
@@ -132,26 +130,54 @@ const App: React.FC = () => {
     const analyserRef = useRef<AnalyserNode | null>(null);
     const animationFrameRef = useRef<number | null>(null);
 
+    // New Features State
+    const [bondLevel, setBondLevel] = useState<number>(0);
+    const [mood, setMood] = useState<string>('Neutral');
+    const [memories, setMemories] = useState<string[]>([]);
+    const [diaryEntries, setDiaryEntries] = useState<DiaryEntry[]>([]);
+    const [diaryPin, setDiaryPin] = useState<string | null>(null);
+    const [isDiaryLocked, setIsDiaryLocked] = useState<boolean>(true);
+    const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
 
+    // Load from localStorage on mount
     useEffect(() => {
         const storedName = localStorage.getItem('nihara-username');
-        if (storedName) {
-            setUserName(storedName);
-        } else {
-            setShowOnboarding(true);
-        }
-        const storedHistory = localStorage.getItem('nihara-history');
-        if (storedHistory) {
-            setHistory(JSON.parse(storedHistory));
-        }
-    }, []);
+        if (storedName) setUserName(storedName); else setShowOnboarding(true);
 
-    useEffect(() => {
-        if(history.length > 0) {
-             localStorage.setItem('nihara-history', JSON.stringify(history));
-        }
-    }, [history]);
+        const storedHistory = localStorage.getItem('nihara-history');
+        if (storedHistory) setHistory(JSON.parse(storedHistory));
+
+        const storedBond = localStorage.getItem('nihara-bond');
+        if (storedBond) setBondLevel(JSON.parse(storedBond));
+
+        const storedMemories = localStorage.getItem('nihara-memories');
+        if (storedMemories) setMemories(JSON.parse(storedMemories));
+
+        const storedDiaryEntries = localStorage.getItem('nihara-diary-entries');
+        if (storedDiaryEntries) setDiaryEntries(JSON.parse(storedDiaryEntries));
+
+        const storedPin = localStorage.getItem('nihara-diary-pin');
+        if (storedPin) setDiaryPin(storedPin);
+    }, []);
     
+    // Save to localStorage on change
+    useEffect(() => { localStorage.setItem('nihara-history', JSON.stringify(history)); }, [history]);
+    useEffect(() => { localStorage.setItem('nihara-bond', JSON.stringify(bondLevel)); }, [bondLevel]);
+    useEffect(() => { localStorage.setItem('nihara-memories', JSON.stringify(memories)); }, [memories]);
+    useEffect(() => { localStorage.setItem('nihara-diary-entries', JSON.stringify(diaryEntries)); }, [diaryEntries]);
+    useEffect(() => { if(diaryPin) localStorage.setItem('nihara-diary-pin', diaryPin); }, [diaryPin]);
+
+    // Derive mood from bondLevel
+    useEffect(() => {
+        if (bondLevel > 5) setMood('Joyful');
+        else if (bondLevel > 0) setMood('Content');
+        else if (bondLevel < -5) setMood('Concerned');
+        else if (bondLevel < 0) setMood('Pensive');
+        else setMood('Neutral');
+    }, [bondLevel]);
+    
+    useEffect(() => { if (currentMode !== AppMode.ImageGen) { setGeneratedImages([]); } }, [currentMode]);
+
     const handleNameSave = (name: string) => {
         setUserName(name);
         localStorage.setItem('nihara-username', name);
@@ -159,10 +185,11 @@ const App: React.FC = () => {
     };
     
     const startNewChat = useCallback(() => {
-        if (userName && currentMode !== AppMode.DeepResearch) {
-             startChat(currentPersonality, currentMode, isUpgraded, userName);
+        if (userName) {
+            const randomMemories = [...memories].sort(() => 0.5 - Math.random()).slice(0, 3);
+            startChat(currentPersonality, currentMode, isUpgraded, userName, bondLevel, randomMemories, mood);
         }
-    }, [currentPersonality, currentMode, isUpgraded, userName]);
+    }, [currentPersonality, currentMode, isUpgraded, userName, bondLevel, memories, mood]);
 
     const saveCurrentChat = useCallback(() => {
         if (messages.length > 1) { // Only save non-empty chats
@@ -190,74 +217,54 @@ const App: React.FC = () => {
         setMessages([]);
         currentChatIdRef.current = Date.now().toString();
         try {
-            startNewChat();
-        } catch (e) {
-            // This error is now handled globally by the UI, but we can log it.
-            console.error("Failed to start new chat session:", e);
-        }
-    }, [currentPersonality, currentMode, isUpgraded, userName]);
+            if (![AppMode.AIDiary, AppMode.ImageGen].includes(currentMode)) {
+                startNewChat();
+            }
+        } catch (e) { console.error("Failed to start new chat session:", e); }
+    }, [currentPersonality, currentMode, isUpgraded, userName, bondLevel, memories, mood]);
 
 
     const handleLoadChat = (id: string) => {
         const chatToLoad = history.find(h => h.id === id);
         if (chatToLoad) {
-            saveCurrentChat(); // Save the current chat before loading another
-            
+            saveCurrentChat(); 
             setMessages(chatToLoad.messages);
             setCurrentPersonality(chatToLoad.personality);
             setCurrentMode(chatToLoad.mode);
             currentChatIdRef.current = id;
-            // The useEffect for personality/mode change will handle re-initializing the chat service
         }
     };
 
+    const processAiInteraction = async (userText: string, assistantText: string) => {
+        const sentiment = await analyzeSentiment(userText);
+        if (sentiment === 'positive') setBondLevel(b => b + 1);
+        if (sentiment === 'negative') setBondLevel(b => Math.max(0, b - 1));
+
+        const memory = await extractMemory(userText, assistantText);
+        if (memory) {
+            setMemories(m => [...m, memory].slice(-20)); // Keep last 20 memories
+        }
+    };
 
     const handleSendMessage = async (text: string, file?: File) => {
         setIsLoading(true);
-        const userMessage: ChatMessage = {
-            id: Date.now().toString(),
-            sender: MessageSender.User,
-            text,
-        };
+        const userMessage: ChatMessage = { id: Date.now().toString(), sender: MessageSender.User, text };
         setMessages((prev) => [...prev, userMessage]);
 
         const assistantMessageId = (Date.now() + 1).toString();
-        const assistantTypingMessage: ChatMessage = {
-            id: assistantMessageId,
-            sender: MessageSender.Assistant,
-            text: '',
-            isTyping: true,
-        };
+        const assistantTypingMessage: ChatMessage = { id: assistantMessageId, sender: MessageSender.Assistant, text: '', isTyping: true };
         setMessages((prev) => [...prev, assistantTypingMessage]);
         
         try {
+            let assistantResponseText = '';
             if (currentMode === AppMode.DeepResearch) {
-                const systemInstruction = getSystemInstruction(currentPersonality, currentMode, isUpgraded, userName);
+                const randomMemories = [...memories].sort(() => 0.5 - Math.random()).slice(0, 3);
+                const systemInstruction = getSystemInstruction(currentPersonality, currentMode, isUpgraded, userName, bondLevel, randomMemories, mood);
                 const { text: responseText, sources } = await sendMessageWithSearch(text, systemInstruction);
+                assistantResponseText = responseText;
                 setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: responseText, sources: sources, isTyping: false } : m));
-            } else if (currentMode === AppMode.ImageGen) {
-                const base64Image = file ? (await fileToDataUrl(file)).split(',')[1] : undefined;
-                const mimeType = file ? file.type : undefined;
-                
-                if (file && base64Image && mimeType) { // Editing
-                    const response = await editImage(text, base64Image, mimeType);
-                    let responseText = '';
-                    let responseImage = '';
-
-                    for (const part of response.candidates[0].content.parts) {
-                        if (part.text) {
-                            responseText += part.text;
-                        } else if (part.inlineData) {
-                            responseImage = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                        }
-                    }
-                    setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: responseText, image: responseImage, isTyping: false } : m));
-                } else { // Generation
-                    const imageUrl = await generateImage(text);
-                    setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: 'Here is the image you requested:', image: imageUrl, isTyping: false } : m));
-                }
             } else {
-                 await sendMessageStream(text, (chunk) => {
+                 assistantResponseText = await sendMessageStream(text, (chunk) => {
                     setMessages((prev) =>
                         prev.map((msg) =>
                             msg.id === assistantMessageId
@@ -267,6 +274,10 @@ const App: React.FC = () => {
                     );
                 });
             }
+
+            if (assistantResponseText) {
+                processAiInteraction(text, assistantResponseText);
+            }
         } catch(e) {
              const errorMessage = e instanceof Error ? e.message : "Sorry, I encountered an error.";
              setMessages((prev) => prev.map(m => m.id === assistantMessageId ? { ...m, text: errorMessage, isTyping: false } : m));
@@ -275,152 +286,183 @@ const App: React.FC = () => {
              setIsLoading(false);
         }
     };
-    
-    const fileToDataUrl = (file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
+
+    const handleGenerateImage = async (prompt: string, aspectRatio: string) => {
+        setIsLoading(true);
+        try {
+            const imageUrl = await generateImage(prompt, aspectRatio);
+            const newImage: GeneratedImage = { id: Date.now().toString(), src: imageUrl, prompt, aspectRatio, };
+            setGeneratedImages(prev => [...prev, newImage]);
+        } catch (e) { console.error("Image generation failed:", e); } 
+        finally { setIsLoading(false); }
     };
     
     const handleToggleLiveMode = async () => {
-        if(isLive) {
-            liveSession?.close();
-            setLiveSession(null);
-            setIsLive(false);
-             if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-                animationFrameRef.current = null;
+        if (isLive) {
+            if (liveSessionPromiseRef.current) {
+                liveSessionPromiseRef.current.then(session => session.close());
+                liveSessionPromiseRef.current = null;
             }
-            analyserRef.current = null;
-            setMicLevel(0);
-        } else {
-            setIsLive(true);
-            setLiveTranscript({ user: '', assistant: '' });
-            liveTranscriptRef.current = { user: '', assistant: '' };
-            try {
-                if (!outputAudioContextRef.current) {
-                    outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-                }
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            setIsLive(false);
+            setLiveStatus('idle');
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            return;
+        }
 
-                const visualizeMicInput = () => {
-                    if (!analyserRef.current) return;
+        setIsLive(true);
+        setLiveStatus('listening');
+
+        if (!outputAudioContextRef.current) {
+            // FIX: Use `(window as any).webkitAudioContext` for Safari compatibility.
+            outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        }
+        
+        const systemInstruction = getSystemInstruction(currentPersonality, AppMode.Chat, isUpgraded, userName, bondLevel, memories, mood);
+
+        const sessionPromise = getAiClient().live.connect({
+            model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+            callbacks: {
+                onopen: async () => {
+                    // FIX: Use `(window as any).webkitAudioContext` for Safari compatibility.
+                    const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const source = inputAudioContext.createMediaStreamSource(stream);
+                    const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
+                    
+                    analyserRef.current = inputAudioContext.createAnalyser();
+                    analyserRef.current.fftSize = 256;
                     const bufferLength = analyserRef.current.frequencyBinCount;
                     const dataArray = new Uint8Array(bufferLength);
-                    analyserRef.current.getByteTimeDomainData(dataArray);
 
-                    let sumSquares = 0.0;
-                    for (const amplitude of dataArray) {
-                        const value = (amplitude / 128.0) - 1.0;
-                        sumSquares += value * value;
+                    const draw = () => {
+                        animationFrameRef.current = requestAnimationFrame(draw);
+                        if (!analyserRef.current) return;
+                        analyserRef.current.getByteFrequencyData(dataArray);
+                        const avg = dataArray.reduce((acc, val) => acc + val, 0) / bufferLength;
+                        setMicLevel(avg / 128);
+                    };
+                    draw();
+
+                    scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
+                        const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
+                        const pcmBlob = createBlobFromAudio(inputData);
+                        liveSessionPromiseRef.current?.then((session) => {
+                            session.sendRealtimeInput({ media: pcmBlob });
+                        });
+                    };
+                    source.connect(analyserRef.current);
+                    analyserRef.current.connect(scriptProcessor);
+                    scriptProcessor.connect(inputAudioContext.destination);
+                },
+                onmessage: async (message: LiveServerMessage) => {
+                    // Interruption
+                    if (message.serverContent?.interrupted) {
+                        setLiveStatus('listening');
+                        audioSourcesRef.current.forEach(source => source.stop());
+                        audioSourcesRef.current.clear();
+                        nextStartTimeRef.current = 0;
                     }
-                    const rms = Math.sqrt(sumSquares / bufferLength);
-                    setMicLevel(rms);
-                    animationFrameRef.current = requestAnimationFrame(visualizeMicInput);
-                };
-                
-                const sessionPromise = getAiClient().live.connect({
-                    model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-                    callbacks: {
-                        onopen: () => {
-                            const source = inputAudioContext.createMediaStreamSource(stream);
-                            const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
-                            
-                            const analyser = inputAudioContext.createAnalyser();
-                            analyser.fftSize = 512;
-                            analyserRef.current = analyser;
 
-                            source.connect(analyser);
-                            analyser.connect(scriptProcessor);
-                            scriptProcessor.connect(inputAudioContext.destination);
-                            
-                            scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
-                                const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
-                                const pcmBlob = createBlobFromAudio(inputData);
-                                sessionPromise.then((session) => {
-                                    session.sendRealtimeInput({ media: pcmBlob });
-                                });
-                            };
-                            visualizeMicInput();
-                        },
-                        onmessage: async (message: LiveServerMessage) => {
-                            // Handle audio
-                            const base64EncodedAudioString =
-                                message.serverContent?.modelTurn?.parts[0]?.inlineData.data;
-                            if (base64EncodedAudioString && outputAudioContextRef.current) {
-                                const ctx = outputAudioContextRef.current;
-                                nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
-                                const audioBuffer = await decodeAudioData(decode(base64EncodedAudioString), ctx, 24000, 1);
-                                const sourceNode = ctx.createBufferSource();
-                                sourceNode.buffer = audioBuffer;
-                                sourceNode.connect(ctx.destination);
-                                sourceNode.addEventListener('ended', () => { audioSourcesRef.current.delete(sourceNode); });
-                                sourceNode.start(nextStartTimeRef.current);
-                                nextStartTimeRef.current = nextStartTimeRef.current + audioBuffer.duration;
-                                audioSourcesRef.current.add(sourceNode);
+                    // Function Calling
+                    if (message.toolCall) {
+                        const session = await liveSessionPromiseRef.current;
+                        for (const fc of message.toolCall.functionCalls) {
+                            let result = "ok", actionMessage = "";
+                            if (fc.name === 'changePersonality') {
+                                const newP = fc.args.personality as Personality;
+                                if (Object.values(Personality).includes(newP)) {
+                                    setCurrentPersonality(newP);
+                                    actionMessage = `Personality set to ${newP}.`;
+                                }
+                            } else if (fc.name === 'changeMode') {
+                                const newM = fc.args.mode as AppMode;
+                                if (Object.values(AppMode).includes(newM)) {
+                                    setCurrentMode(newM);
+                                    actionMessage = `Mode changed to ${newM}.`;
+                                }
                             }
-                            if (message.serverContent?.interrupted) {
-                                for (const source of audioSourcesRef.current.values()) { source.stop(); }
-                                audioSourcesRef.current.clear();
-                                nextStartTimeRef.current = 0;
+                            if(actionMessage) {
+                                setLiveActionStatus(actionMessage);
+                                setTimeout(() => setLiveActionStatus(null), 3000);
                             }
+                            session.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result } } });
+                        }
+                    }
 
-                            // Handle transcription
-                            if (message.serverContent?.inputTranscription) {
-                                liveTranscriptRef.current.user += message.serverContent.inputTranscription.text;
+                    // Transcription & Audio Output
+                    const outputTranscription = message.serverContent?.outputTranscription?.text;
+                    const inputTranscription = message.serverContent?.inputTranscription?.text;
+                    if (outputTranscription) liveTranscriptRef.current.assistant += outputTranscription;
+                    if (inputTranscription) liveTranscriptRef.current.user += inputTranscription;
+
+                    if (message.serverContent?.turnComplete) {
+                        setLiveTranscript(prev => ({...prev, user: liveTranscriptRef.current.user, assistant: liveTranscriptRef.current.assistant}));
+                        liveTranscriptRef.current = { user: '', assistant: '' };
+                        if (audioSourcesRef.current.size === 0) setLiveStatus('listening');
+                    } else {
+                         setLiveTranscript({ ...liveTranscriptRef.current });
+                    }
+
+                    const audioData = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+                    if (audioData && outputAudioContextRef.current) {
+                        setLiveStatus('speaking');
+                        const ctx = outputAudioContextRef.current;
+                        nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
+                        const audioBuffer = await decodeAudioData(decode(audioData), ctx, 24000, 1);
+                        const source = ctx.createBufferSource();
+                        source.buffer = audioBuffer;
+                        source.connect(ctx.destination);
+                        source.addEventListener('ended', () => {
+                            audioSourcesRef.current.delete(source);
+                            if (audioSourcesRef.current.size === 0) {
+                                setLiveStatus('listening');
                             }
-                             if (message.serverContent?.outputTranscription) {
-                                liveTranscriptRef.current.assistant += message.serverContent.outputTranscription.text;
-                            }
-                            setLiveTranscript({ ...liveTranscriptRef.current });
-                            
-                            if (message.serverContent?.turnComplete) {
-                                const fullUserInput = liveTranscriptRef.current.user;
-                                const fullAssistantOutput = liveTranscriptRef.current.assistant;
-                                
-                                if (fullUserInput.trim()) {
-                                    setMessages(prev => [...prev, { id: Date.now().toString(), sender: MessageSender.User, text: fullUserInput.trim() }]);
-                                }
-                                if (fullAssistantOutput.trim()) {
-                                    setMessages(prev => [...prev, { id: (Date.now()+1).toString(), sender: MessageSender.Assistant, text: fullAssistantOutput.trim() }]);
-                                }
-                                
-                                liveTranscriptRef.current = { user: '', assistant: '' };
-                                setLiveTranscript({ user: '', assistant: '' });
-                            }
-                        },
-                        onerror: (e: ErrorEvent) => {
-                            console.error('Live session error:', e);
-                            setIsLive(false);
-                        },
-                        onclose: () => {
-                           setIsLive(false);
-                           console.log('Live session closed');
-                        },
-                    },
-                    config: {
-                        responseModalities: [Modality.AUDIO],
-                        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceId } } },
-                        systemInstruction: getSystemInstruction(currentPersonality, currentMode, isUpgraded, userName),
-                        inputAudioTranscription: {},
-                        outputAudioTranscription: {},
-                    },
-                });
-                setLiveSession(await sessionPromise);
-            } catch (error) {
-                console.error("Failed to start live mode:", error);
-                setIsLive(false);
-                 if (animationFrameRef.current) {
-                    cancelAnimationFrame(animationFrameRef.current);
-                }
-                alert("Could not access microphone. Please check permissions.");
-            }
-        }
+                        });
+                        source.start(nextStartTimeRef.current);
+                        nextStartTimeRef.current += audioBuffer.duration;
+                        audioSourcesRef.current.add(source);
+                    }
+                },
+                onerror: (e: ErrorEvent) => { console.error('Live session error:', e); setLiveStatus('idle'); },
+                onclose: (e: CloseEvent) => { setLiveStatus('idle'); },
+            },
+            config: {
+                responseModalities: [Modality.AUDIO],
+                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceId } } },
+                systemInstruction,
+                outputAudioTranscription: {},
+                inputAudioTranscription: {},
+                tools: [{ functionDeclarations: [changePersonalityDeclaration, changeModeDeclaration] }],
+            },
+        });
+        liveSessionPromiseRef.current = sessionPromise;
     };
+
+
+    // --- DIARY HANDLERS ---
+    const handleAddDiaryEntry = (content: string) => { const newEntry: DiaryEntry = { id: Date.now().toString(), timestamp: Date.now(), content }; setDiaryEntries(prev => [...prev, newEntry]); };
+    const handleSetDiaryPin = (pin: string) => { setDiaryPin(pin); setIsDiaryLocked(false); };
+    const handleUnlockDiary = (pin: string): boolean => { if (pin === diaryPin) { setIsDiaryLocked(false); return true; } return false; };
+
+
+    const renderMainView = () => {
+        if (isLive) {
+            return <LiveView transcript={liveTranscript} personality={currentPersonality} isUpgraded={isUpgraded} onToggleLive={handleToggleLiveMode} micLevel={micLevel} status={liveStatus} actionStatus={liveActionStatus} />;
+        }
+        switch(currentMode) {
+            case AppMode.AIDiary:
+                return <DiaryView entries={diaryEntries} onAddEntry={handleAddDiaryEntry} onSetPin={handleSetDiaryPin} onUnlock={handleUnlockDiary} isLocked={isDiaryLocked} setIsLocked={setIsDiaryLocked} pinIsSet={!!diaryPin} />;
+            case AppMode.ImageGen:
+                return <ImageGenView onGenerate={handleGenerateImage} isLoading={isLoading} images={generatedImages} />;
+            default:
+                return (
+                    <>
+                        <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} />
+                        <InputBar onSendMessage={handleSendMessage} isLoading={isLoading} isLive={isLive} onToggleLive={handleToggleLiveMode} />
+                    </>
+                );
+        }
+    }
 
     return (
         <div id="root" className={`h-screen w-screen text-white font-sans overflow-hidden flex ${isUpgraded ? 'mega-pro' : ''}`}>
@@ -435,6 +477,7 @@ const App: React.FC = () => {
                 onLoadChat={handleLoadChat}
                 isSidebarOpen={isSidebarOpen}
                 setIsSidebarOpen={setIsSidebarOpen}
+                bondLevel={bondLevel}
             />
             <main className="flex-1 flex flex-col relative">
                  <div className="flex-shrink-0 h-20 flex items-center justify-between px-6 md:justify-center">
@@ -454,26 +497,13 @@ const App: React.FC = () => {
                     </div>
                     <div className="w-6 md:hidden" /> {/* Spacer for mobile to center the upgrade button */}
                 </div>
-                {isLive ? (
-                    <LiveModeView
-                        transcript={liveTranscript}
-                        personality={currentPersonality}
-                        isUpgraded={isUpgraded}
-                        onToggleLive={handleToggleLiveMode}
-                        micLevel={micLevel}
-                    />
-                ) : (
-                    <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} />
-                )}
-                {!isLive && <InputBar onSendMessage={handleSendMessage} isLoading={isLoading} isLive={isLive} onToggleLive={handleToggleLiveMode} />}
+                {renderMainView()}
             </main>
             <OnboardingModal show={showOnboarding} onSave={handleNameSave} />
             <UpgradeModal 
                 show={showUpgradeModal} 
                 onClose={() => setShowUpgradeModal(false)}
-                onUpgrade={() => {
-                    setIsUpgraded(true);
-                }}
+                onUpgrade={() => { setIsUpgraded(true); }}
             />
             <SettingsModal
                 show={showSettingsModal}

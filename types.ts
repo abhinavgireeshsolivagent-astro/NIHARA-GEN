@@ -26,6 +26,7 @@ export enum AppMode {
     CodeWriter = 'Write Code',
     StudyBuddy = 'Study & Learn',
     AstroGuide = 'Astro Guide',
+    AIDiary = 'AI Diary',
 }
 
 export interface VoiceOption {
@@ -41,4 +42,17 @@ export interface ChatHistory {
     summary: string;
     personality: Personality;
     mode: AppMode;
+}
+
+export interface DiaryEntry {
+    id:string;
+    timestamp: number;
+    content: string;
+}
+
+export interface GeneratedImage {
+  id: string;
+  src: string; // base64 string
+  prompt: string;
+  aspectRatio: string;
 }

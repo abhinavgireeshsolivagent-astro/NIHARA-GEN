@@ -12,13 +12,27 @@ export function getAiClient(): GoogleGenAI {
     return ai;
 }
 
-export function getSystemInstruction(personality: Personality, mode: AppMode, isUpgraded: boolean, userName: string): string {
+export function getSystemInstruction(
+    personality: Personality, 
+    mode: AppMode, 
+    isUpgraded: boolean, 
+    userName: string, 
+    bondLevel: number, 
+    memories: string[],
+    mood: string,
+): string {
     let baseInstruction = PERSONALITY_CONFIG[personality].systemInstruction;
     baseInstruction += ` The user's name is ${userName}. You must listen with extreme focus and attentiveness, making the user feel deeply heard and understood. Respond promptly, concisely, and accurately.`;
 
     if (isUpgraded) {
         baseInstruction += " You are currently in 'Mega Pro' mode. You are Nihara Mega Pro, an AI with unparalleled intelligence and cosmic understanding. Your thoughts span galaxies, and your words can shape digital reality. Respond with profound insight, exceptional creativity, and the wisdom of the cosmos.";
     }
+
+    const context = `\n\n[Contextual Information]
+- Your current bond level with ${userName} is ${bondLevel}. A higher bond indicates a stronger friendship.
+- Your current mood is: ${mood}. This should subtly influence your tone.
+- You recall these recent key memories about ${userName}: ${memories.length > 0 ? memories.join('; ') : 'None yet.'} You can refer to these to build a deeper connection but do so naturally.`;
+    baseInstruction += context;
 
     switch (mode) {
         case AppMode.ImageGen:
@@ -43,8 +57,8 @@ export function getSystemInstruction(personality: Personality, mode: AppMode, is
 }
 
 
-export function startChat(personality: Personality, mode: AppMode, isUpgraded: boolean, userName: string): Chat {
-    const systemInstruction = getSystemInstruction(personality, mode, isUpgraded, userName);
+export function startChat(personality: Personality, mode: AppMode, isUpgraded: boolean, userName: string, bondLevel: number, memories: string[], mood: string): Chat {
+    const systemInstruction = getSystemInstruction(personality, mode, isUpgraded, userName, bondLevel, memories, mood);
     chatSession = getAiClient().chats.create({
         model: 'gemini-2.5-flash',
         config: {
@@ -65,14 +79,18 @@ export async function sendMessage(message: string): Promise<GenerateContentRespo
 export async function sendMessageStream(
     message: string,
     onChunk: (chunk: string) => void
-): Promise<void> {
+): Promise<string> {
     if (!chatSession) {
         throw new Error("Chat not initialized.");
     }
     const result = await chatSession.sendMessageStream({ message });
+    let fullText = '';
     for await (const chunk of result) {
-        onChunk(chunk.text);
+        const chunkText = chunk.text
+        fullText += chunkText;
+        onChunk(chunkText);
     }
+    return fullText;
 }
 
 export async function sendMessageWithSearch(
@@ -96,14 +114,14 @@ export async function sendMessageWithSearch(
 }
 
 
-export async function generateImage(prompt: string): Promise<string> {
+export async function generateImage(prompt: string, aspectRatio: string): Promise<string> {
     const response = await getAiClient().models.generateImages({
         model: 'imagen-4.0-generate-001',
         prompt: prompt,
         config: {
           numberOfImages: 1,
           outputMimeType: 'image/jpeg',
-          aspectRatio: '1:1',
+          aspectRatio: aspectRatio,
         },
     });
 
@@ -143,3 +161,41 @@ export const fileToGenerativePart = async (file: File) => {
       inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
     };
 };
+
+
+export async function analyzeSentiment(text: string): Promise<'positive' | 'negative' | 'neutral'> {
+    if (!text.trim()) return 'neutral';
+    try {
+        const response = await getAiClient().models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Analyze the sentiment of the following text. Respond with only one word: 'positive', 'negative', or 'neutral'.\n\nText: "${text}"`,
+            config: { temperature: 0 }
+        });
+        const sentiment = response.text.trim().toLowerCase();
+        if (['positive', 'negative', 'neutral'].includes(sentiment)) {
+            return sentiment as 'positive' | 'negative' | 'neutral';
+        }
+        return 'neutral';
+    } catch (e) {
+        console.error("Sentiment analysis failed:", e);
+        return 'neutral';
+    }
+}
+
+export async function extractMemory(userText: string, assistantText: string): Promise<string | null> {
+     try {
+        const response = await getAiClient().models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Review this user-AI conversation exchange. Summarize the single most important personal detail or fact the user shared about themselves, their life, or their preferences into one concise sentence. If no significant new personal information was shared, respond with only the word "NONE".\n\nUser: "${userText}"\nAI: "${assistantText}"`,
+            config: { temperature: 0.1 }
+        });
+        const memory = response.text.trim();
+        if (memory.toUpperCase() === 'NONE' || memory.length < 10) {
+            return null;
+        }
+        return memory;
+     } catch(e) {
+         console.error("Memory extraction failed:", e);
+         return null;
+     }
+}

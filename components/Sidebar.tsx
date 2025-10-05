@@ -22,6 +22,7 @@ interface SidebarProps {
   onLoadChat: (id: string) => void;
   isSidebarOpen: boolean;
   setIsSidebarOpen: (isOpen: boolean) => void;
+  bondLevel: number;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -35,6 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onLoadChat,
   isSidebarOpen,
   setIsSidebarOpen,
+  bondLevel,
 }) => {
   const [personalityOpen, setPersonalityOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
@@ -49,6 +51,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     onLoadChat(id);
     setIsSidebarOpen(false); // Close on selection for mobile
   };
+
+  const bondLvl = Math.floor(bondLevel / 10);
+  const bondProgress = (bondLevel % 10) * 10;
 
   return (
     <>
@@ -80,7 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Personality Selector */}
-          <div className="mb-6">
+          <div className="mb-4">
             <button onClick={() => setPersonalityOpen(!personalityOpen)} className="w-full bg-black/20 rounded-lg p-3 flex items-center justify-between transition hover:bg-black/30">
               <div className="flex items-center gap-3">
                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-xl bg-gradient-to-br ${currentConfig.color}`}>
@@ -115,6 +120,18 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Bond Level */}
+          <div className="mb-4 px-1">
+            <div className="text-xs flex justify-between items-center mb-1 text-gray-400">
+              <span>Bond Level</span>
+              <span className="font-bold text-white">Lvl. {bondLvl}</span>
+            </div>
+            <div className="w-full bg-black/20 rounded-full h-2">
+              <div className="bg-gradient-to-r from-pink-500 to-purple-500 h-2 rounded-full transition-all duration-500" style={{ width: `${bondProgress}%` }}></div>
+            </div>
+          </div>
+
 
           {/* App Modes */}
           <nav className="space-y-1 mb-4">
