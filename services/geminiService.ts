@@ -14,7 +14,7 @@ export function getAiClient(): GoogleGenAI {
 
 export function getSystemInstruction(personality: Personality, mode: AppMode, isUpgraded: boolean, userName: string): string {
     let baseInstruction = PERSONALITY_CONFIG[personality].systemInstruction;
-    baseInstruction += ` The user's name is ${userName}.`;
+    baseInstruction += ` The user's name is ${userName}. You must listen with extreme focus and attentiveness, making the user feel deeply heard and understood. Respond promptly, concisely, and accurately.`;
 
     if (isUpgraded) {
         baseInstruction += " You are currently in 'Mega Pro' mode. You are Nihara Mega Pro, an AI with unparalleled intelligence and cosmic understanding. Your thoughts span galaxies, and your words can shape digital reality. Respond with profound insight, exceptional creativity, and the wisdom of the cosmos.";

@@ -65,13 +65,18 @@ const LiveModeView: React.FC<{
     personality: Personality;
     isUpgraded: boolean;
     onToggleLive: () => void;
-}> = ({ transcript, personality, isUpgraded, onToggleLive }) => {
+    micLevel: number;
+}> = ({ transcript, personality, isUpgraded, onToggleLive, micLevel }) => {
     const config = PERSONALITY_CONFIG[personality];
     const orbColor = isUpgraded ? 'from-yellow-400 via-orange-500 to-red-600' : config.color;
+    const orbScale = 1 + micLevel * 0.5;
 
     return (
         <div className="flex-1 flex flex-col items-center justify-center relative chat-view-bg animate-fade-in-blur">
-            <div className={`relative w-64 h-64 md:w-80 md:h-80 rounded-full flex items-center justify-center bg-gradient-to-br ${orbColor} pulse-orb-animation`}>
+            <div 
+                className={`relative w-64 h-64 md:w-80 md:h-80 rounded-full flex items-center justify-center bg-gradient-to-br ${orbColor} pulse-orb-animation`}
+                style={{ transform: `scale(${orbScale})`, transition: 'transform 0.1s ease-out' }}
+            >
                 <div className="absolute inset-2 bg-gray-900 rounded-full"></div>
                 <div className={`absolute inset-4 glassmorphic rounded-full ${isUpgraded ? 'mega-pro-glow' : ''}`}></div>
                 <div className="relative z-10 p-4 text-center">
@@ -123,6 +128,10 @@ const App: React.FC = () => {
     const outputAudioContextRef = useRef<AudioContext | null>(null);
     const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
     const nextStartTimeRef = useRef<number>(0);
+    const [micLevel, setMicLevel] = useState(0);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
+
 
     useEffect(() => {
         const storedName = localStorage.getItem('nihara-username');
@@ -281,6 +290,12 @@ const App: React.FC = () => {
             liveSession?.close();
             setLiveSession(null);
             setIsLive(false);
+             if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+                animationFrameRef.current = null;
+            }
+            analyserRef.current = null;
+            setMicLevel(0);
         } else {
             setIsLive(true);
             setLiveTranscript({ user: '', assistant: '' });
@@ -291,6 +306,22 @@ const App: React.FC = () => {
                 }
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 const inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+
+                const visualizeMicInput = () => {
+                    if (!analyserRef.current) return;
+                    const bufferLength = analyserRef.current.frequencyBinCount;
+                    const dataArray = new Uint8Array(bufferLength);
+                    analyserRef.current.getByteTimeDomainData(dataArray);
+
+                    let sumSquares = 0.0;
+                    for (const amplitude of dataArray) {
+                        const value = (amplitude / 128.0) - 1.0;
+                        sumSquares += value * value;
+                    }
+                    const rms = Math.sqrt(sumSquares / bufferLength);
+                    setMicLevel(rms);
+                    animationFrameRef.current = requestAnimationFrame(visualizeMicInput);
+                };
                 
                 const sessionPromise = getAiClient().live.connect({
                     model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -298,6 +329,15 @@ const App: React.FC = () => {
                         onopen: () => {
                             const source = inputAudioContext.createMediaStreamSource(stream);
                             const scriptProcessor = inputAudioContext.createScriptProcessor(4096, 1, 1);
+                            
+                            const analyser = inputAudioContext.createAnalyser();
+                            analyser.fftSize = 512;
+                            analyserRef.current = analyser;
+
+                            source.connect(analyser);
+                            analyser.connect(scriptProcessor);
+                            scriptProcessor.connect(inputAudioContext.destination);
+                            
                             scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
                                 const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
                                 const pcmBlob = createBlobFromAudio(inputData);
@@ -305,8 +345,7 @@ const App: React.FC = () => {
                                     session.sendRealtimeInput({ media: pcmBlob });
                                 });
                             };
-                            source.connect(scriptProcessor);
-                            scriptProcessor.connect(inputAudioContext.destination);
+                            visualizeMicInput();
                         },
                         onmessage: async (message: LiveServerMessage) => {
                             // Handle audio
@@ -375,6 +414,9 @@ const App: React.FC = () => {
             } catch (error) {
                 console.error("Failed to start live mode:", error);
                 setIsLive(false);
+                 if (animationFrameRef.current) {
+                    cancelAnimationFrame(animationFrameRef.current);
+                }
                 alert("Could not access microphone. Please check permissions.");
             }
         }
@@ -418,6 +460,7 @@ const App: React.FC = () => {
                         personality={currentPersonality}
                         isUpgraded={isUpgraded}
                         onToggleLive={handleToggleLiveMode}
+                        micLevel={micLevel}
                     />
                 ) : (
                     <ChatView messages={messages} personality={currentPersonality} userName={userName} mode={currentMode} isUpgraded={isUpgraded} />
